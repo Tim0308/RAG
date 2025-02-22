@@ -56,7 +56,7 @@ export const StatusCard = ({ date, status, reporter, comment }: StatusCardProps)
         )}
       </div>
 
-      <div className="flex justify-end mt-4 space-x-2">
+      {/* <div className="flex justify-end mt-4 space-x-2">
         {isEditing ? (
           <button
             className="flex items-center gap-2 px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition"
@@ -80,7 +80,7 @@ export const StatusCard = ({ date, status, reporter, comment }: StatusCardProps)
             </button>
           </>
         )}
-      </div>
+      </div> */}
     </div>
   );
 };

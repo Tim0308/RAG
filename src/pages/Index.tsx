@@ -4,56 +4,32 @@ import { StatusTimeline } from "@/components/StatusTimeline";
 import { useToast } from "@/components/ui/use-toast";
 import { MetricsOverview } from "@/components/MetricsOverview";
 import { AddReportForm } from "@/components/AddReportForm";
+import { Listbox } from "@headlessui/react";
+import { Check, ChevronDown } from "lucide-react";
 
-type Status = {
-  date: string;
-  status: "Green" | "Amber" | "Red";
-  reporter: string;
-  comment: string;
-};
-
-type Project = {
-  name: string;
-  link: string; // Storing the link separately
-  statuses: Status[];
-};
+// (1) Import our reusable fetch function and types
+import { fetchProjectsList, Project, Status } from "@/lib/fetchRagData";
 
 const Index = () => {
   const { toast } = useToast();
+
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>("");
-  const [selectedProjectLink, setSelectedProjectLink] = useState<string>(""); // For displaying the link
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedProjectLink, setSelectedProjectLink] = useState<string>("");
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [isAddingReport, setIsAddingReport] = useState(false);
 
-  // Fetch the JSON data on component mount
+  // (2) Use the reusable fetch function
   useEffect(() => {
-    const fetchProjects = async () => {
+    const getProjects = async () => {
       try {
-        const response = await fetch("./src/pages/grouped_output.json");
-        const data: { [key: string]: { Date: string; "RAG Status": string; "Status Context": string }[] } = await response.json();
-        // Convert the JSON to an array of project objects
-        const projectsList: Project[] = Object.entries(data).map(([name, statuses]) => {
-          const nameParts = name.split(" (");
-          const projectName = nameParts[0];
-          const projectLink = nameParts[1]?.replace(")", "") || "";
-
-          return {
-            name: projectName,
-            link: projectLink,
-            statuses: statuses.map((status) => ({
-              date: status.Date,
-              status: status["RAG Status"] as "Green" | "Amber" | "Red",
-              reporter: "Someone else", // Assuming reporter is fixed, update as needed
-              comment: status["Status Context"],
-            })),
-          };
-        });
-
+        const projectsList = await fetchProjectsList();
         setProjects(projectsList);
-        setStatuses(projectsList[0]?.statuses.slice(0, 5) || []);
-        setSelectedProject(projectsList[0]?.name || "");
-        setSelectedProjectLink(projectsList[0]?.link || "");
+        if (projectsList.length > 0) {
+          setStatuses(projectsList[0].statuses.slice(0, 5));
+          setSelectedProject(projectsList[0]);
+          setSelectedProjectLink(projectsList[0].link);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
         toast({
@@ -63,37 +39,46 @@ const Index = () => {
       }
     };
 
-    fetchProjects();
-  }, []);
+    getProjects();
+  }, [toast]);
 
-  // Handle project selection change
-  const handleProjectSelect = (projectName: string) => {
-    const selected = projects.find(project => project.name === projectName);
-    if (selected) {
-      setStatuses(selected.statuses.slice(0, 5)); // Display the 5 most recent statuses
-      setSelectedProject(projectName);
-      setSelectedProjectLink(selected.link); // Display the link after selecting the project
-    }
+  // Handle project selection change (now accepts a Project object)
+  const handleProjectSelect = (project: Project) => {
+    setSelectedProject(project);
+    setStatuses(project.statuses.slice(0, 5));
+    setSelectedProjectLink(project.link);
   };
 
   // Handle adding a new status report
-  const handleAddReport = ({ status, comment }: { status: "Green" | "Amber" | "Red"; comment: string }) => {
+  const handleAddReport = ({
+    status,
+    comment,
+  }: {
+    status: "Green" | "Amber" | "Red";
+    comment: string;
+  }) => {
     const newStatus: Status = {
       date: new Date().toISOString(),
       status,
-      reporter: "Abdullahi Abdi", // In a real app, this would come from the logged-in user
+      reporter: "Abdullahi Abdi",
       comment,
     };
 
     // Append to the selected project's status list
     const updatedProjects = projects.map((project) =>
-      project.name === selectedProject
+      project.name === selectedProject?.name
         ? { ...project, statuses: [newStatus, ...project.statuses] }
         : project
     );
 
     setProjects(updatedProjects);
-    setStatuses(updatedProjects.find(p => p.name === selectedProject)?.statuses.slice(0, 5) || []);
+
+    // Update the statuses we're displaying (just 5 most recent).
+    const updatedProject = updatedProjects.find(
+      (p) => p.name === selectedProject?.name
+    );
+    setStatuses(updatedProject?.statuses.slice(0, 5) || []);
+
     toast({
       title: "Report Added",
       description: "Your status report has been successfully added.",
@@ -105,43 +90,97 @@ const Index = () => {
       <div className="max-w-[1800px] mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Status reports for the {selectedProject}</h1>
-            <p className="mt-2 text-gray-600">Track and monitor project health over time</p>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Status reports for the {selectedProject?.name}
+            </h1>
+            <p className="mt-2 text-gray-600">
+              Track and monitor project health over time
+            </p>
           </div>
 
-          <MetricsOverview />
+          {/* MetricsOverview receives the selected project's statuses */}
+          <MetricsOverview
+            projectName={selectedProject?.name || ""}
+            statuses={statuses}
+          />
 
           <div>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Status History</h2>
-                <p className="mt-1 text-sm text-gray-600">View and manage status reports</p>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Status History
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  View and manage status reports
+                </p>
               </div>
-              {/* Project Select Dropdown */}
-              <select
-                value={selectedProject}
-                onChange={(e) => handleProjectSelect(e.target.value)}
-                className="border border-gray-300 rounded-md py-2 px-4"
-              >
-                {projects.map((project) => (
-                  <option key={project.name} value={project.name}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+              {/* Prettier dropdown using Headless UI Listbox */}
+            <div className="w-72 mb-4">
+              <Listbox value={selectedProject} onChange={handleProjectSelect}>
+                {({ open }) => (
+                  <div className="relative mt-1">
+                    <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm">
+                      <span className="block truncate">
+                        {selectedProject ? selectedProject.name : "Select a project"}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <ChevronDown className="h-5 w-5 text-gray-400" />
+                      </span>
+                    </Listbox.Button>
+                    <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+                      {projects.map((project) => (
+                        <Listbox.Option
+                          key={project.name}
+                          value={project}
+                          className={({ active }) =>
+                            `relative cursor-default select-none py-2 pl-3 pr-9 ${
+                              active ? "bg-indigo-600 text-white" : "text-gray-900"
+                            }`
+                          }
+                        >
+                          {({ selected, active }) => (
+                            <>
+                              <span
+                                className={`block truncate ${
+                                  selected ? "font-semibold" : "font-normal"
+                                }`}
+                              >
+                                {project.name}
+                              </span>
+                              {selected && (
+                                <span
+                                  className={`absolute inset-y-0 right-0 flex items-center pr-4 ${
+                                    active ? "text-white" : "text-indigo-600"
+                                  }`}
+                                >
+                                  <Check className="h-5 w-5" aria-hidden="true" />
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </Listbox.Option>
+                      ))}
+                    </Listbox.Options>
+                  </div>
+                )}
+              </Listbox>
+            </div>
               <AddReportButton onClick={() => setIsAddingReport(true)} />
             </div>
-            {/* Display the project link after selection */}
+
+            
+
             {selectedProjectLink && (
               <p className="text-sm text-gray-600 mt-2 mb-4 flex items-center">
-                <span className="mr-2 text-gray-700 font-semibold">Project Link:</span>
+                <span className="mr-2 text-gray-700 font-semibold">
+                  Project Link:
+                </span>
                 <a
                   href={selectedProjectLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 transition duration-300 ease-in-out flex items-center space-x-2"
                 >
-                  {/* Optional: Add an external link icon next to the URL */}
                   <span>{selectedProjectLink}</span>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -154,10 +193,9 @@ const Index = () => {
                     <path d="M10.854 4.646a.5.5 0 0 0 0-.708L7.707.707a.5.5 0 1 0-.708.708L9.793 4H2.5a.5.5 0 0 0 0 1h7.293l-2.793 2.793a.5.5 0 1 0 .708.708l3.5-3.5z" />
                   </svg>
                 </a>
-            </p>
-            
-
+              </p>
             )}
+
             <StatusTimeline statuses={statuses} />
           </div>
 
