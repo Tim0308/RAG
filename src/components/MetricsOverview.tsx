@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingDown, TrendingUp, Minus, AlertCircle, Circle } from "lucide-react";
 import {
@@ -34,6 +34,7 @@ interface MetricsOverviewProps {
 }
 
 const MetricCard = ({ title, value, trend, icon, children }: MetricCardProps) => {
+  
   const getTrendIcon = () => {
     switch (trend) {
       case "up":
@@ -91,6 +92,8 @@ const CustomDot = (props: any) => {
 };
 
 export const MetricsOverview = ({ projectName, statuses }: MetricsOverviewProps) => {
+  const [chartKey, setChartKey] = useState(0);
+
   // Convert the project statuses into chart-friendly data
   const latestTenRecords = useMemo(() => {
     if (!statuses || !statuses.length) return [];
@@ -107,11 +110,21 @@ export const MetricsOverview = ({ projectName, statuses }: MetricsOverviewProps)
       .slice(-10);
   }, [statuses]);
 
+  // Force chart to re-render after component mounts to ensure proper sizing
+  useEffect(() => {
+    // Small delay to ensure container dimensions are settled
+    const timer = setTimeout(() => {
+      setChartKey(prevKey => prevKey + 1);
+    }, 20); // 100ms of delay
+    
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
       <MetricCard
         title="RAG Status Required"
-        value="No"
+        value="Yes"
         trend="neutral"
         icon={<AlertCircle className="h-4 w-4 text-muted-foreground" />}
       />
@@ -121,43 +134,45 @@ export const MetricsOverview = ({ projectName, statuses }: MetricsOverviewProps)
         trend="up"
         icon={<Circle className="h-4 w-4 text-muted-foreground" />}
       >
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={latestTenRecords}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="date"
-              tickFormatter={(dateStr) => {
-                const dateObj = new Date(dateStr);
-                return dateObj.toLocaleString("default", { month: "short" });
-              }}
-            />
-            <YAxis
-              domain={[1, 3]}
-              ticks={[1, 2, 3]}
-              tickFormatter={(tick) => {
-                switch (tick) {
-                  case 1:
-                    return "Green";
-                  case 2:
-                    return "Amber";
-                  case 3:
-                    return "Red";
-                  default:
-                    return "";
-                }
-              }}
-            />
-            <Tooltip />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="status"
-              stroke="#8884d8"
-              strokeWidth={3}
-              dot={<CustomDot />}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="w-full h-[300px]">
+          <ResponsiveContainer width="101%" height="100%" key={chartKey}>
+            <LineChart data={latestTenRecords}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="date"
+                tickFormatter={(dateStr) => {
+                  const dateObj = new Date(dateStr);
+                  return dateObj.toLocaleString("default", { month: "short" });
+                }}
+              />
+              <YAxis
+                domain={[1, 3]}
+                ticks={[1, 2, 3]}
+                tickFormatter={(tick) => {
+                  switch (tick) {
+                    case 1:
+                      return "Green";
+                    case 2:
+                      return "Amber";
+                    case 3:
+                      return "Red";
+                    default:
+                      return "";
+                  }
+                }}
+              />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="status"
+                stroke="#8884d8"
+                strokeWidth={3}
+                dot={<CustomDot />}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </MetricCard>
     </div>
   );
